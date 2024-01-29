@@ -8,7 +8,7 @@
             "program": "vk_events.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--login", ""]
+            "args": ["--token", ""]
         }
     ]
 }
