@@ -8,12 +8,13 @@ def vk_get_events(vk_token: str, time: int):
 
     import requests
 
-    data = {'access_token': vk_token, 'v': '5.199'}
+    data = {'access_token': vk_token, 'v': '5.199', 'fields': 'timezone'}
 
     response = requests.post('https://api.vk.com/method/users.get', data = data)
     if not response: exit(-1)
     print(response.json())
     user_id = response.json()['response'][0]['id']
+    tz = int(response.json()['response'][0]['timezone']) * 60 * 60
 
     data['user_id'] = user_id
     data['filter'] = 'events'
@@ -22,6 +23,13 @@ def vk_get_events(vk_token: str, time: int):
     response = requests.post('https://api.vk.com/method/groups.get', data = data)
     if not response: exit(-1)
     events = [{k: v for k, v in i.items() if not 'photo' in k} for i in response.json()['response']['items'] if i['start_date'] >= time]
+    for event in events:
+        if not 'finish_date' in event:
+            d = 24 * 60 * 60
+            event['finish_date'] = (event['start_date'] + d) // d * d - 60 - tz
+
+        event['start_date']  -= tz
+        event['finish_date'] -= tz
     print(events)
 
     return events
@@ -49,12 +57,6 @@ if __name__ == "__main__":
 
         if not e['screen_name']: e['screen_name'] = f"event{e['id']}"
         e['description'] = f"<a href='https://vk.com/{e['screen_name']}' title = 'vk_id: {e['id']}'>{e['name']}</a><br/>{e['location']}"
-
-        if 'finish_date' not in e:
-            finish_date = datetime.datetime.fromtimestamp(e['start_date']) + datetime.timedelta(days = 1)
-            finish_date = datetime.datetime.combine(finish_date.date(), datetime.datetime.min.time())
-            e['finish_date'] = finish_date.timestamp()
-
 
     # google calendar ==========================================================
 
@@ -94,26 +96,49 @@ if __name__ == "__main__":
 
     # edit events list
     for event in [i for i in events if 'vk_id: ' in i['description']]: # is robots event
+        if not 'location' in event: event['location'] = ''
         for vk_event in vk_events:
-            if f"vk_id: {vk_event['id']}" in event:
+            if f"vk_id: {vk_event['id']}" in event['description']:
+                s = int(datetime.datetime.fromisoformat(event['start']['dateTime']).timestamp())
+                f = int(datetime.datetime.fromisoformat(event['end']['dateTime']).timestamp())
                 if vk_event['name'] != event['summary'] or \
                    vk_event['location'] != event['location'] or \
                    vk_event['description'] not in event['description'] or \
-                   vk_event['start_date'] != datetime.datetime.fromisoformat(event['start']['DateTime']) or \
-                   vk_event['finish_date'] != datetime.datetime.fromisoformat(event['end']['DateTime']) or \
+                   vk_event['start_date'] != s - 3 * 60 * 60 or \
+                   vk_event['finish_date'] != f - 3 * 60 * 60 or \
                    False:
+                    
                     event['summary'] = vk_event['name']
                     event['location'] = vk_event['location']
                     if vk_event['description'] not in event['description']:
                         event['description'] = vk_event['description']
-                    event['start']['DateTime'] = datetime.datetime.fromtimestamp(vk_event['start_date']).isoformat() + 'Z'
-                    event['end']['DateTime'] = datetime.datetime.fromtimestamp(vk_event['finish_date']).isoformat() + 'Z'
-                    print('update_event') # todo
+                    event['start']['dateTime'] = datetime.datetime.fromtimestamp(vk_event['start_date']).isoformat() + 'Z'
+                    event['end']['dateTime'] = datetime.datetime.fromtimestamp(vk_event['finish_date']).isoformat() + 'Z'
+                    
+                    # update event
+                    updated_event = service.events().update(calendarId = args.cid, eventId = event['id'], body = event).execute()
+                    print (updated_event['updated'])  # Print the updated date.
 
                 vk_event['id'] = 0
                 break
         else:
-            print('event must be deleted') # todo
+            # delete event
+            service.events().delete(calendarId = args.cid, eventId = event['id']).execute()
+            print(f"event '{event['id']}' is deleted")
 
     for vk_event in [i for i in vk_events if i['id'] != 0]:
-        print('add vk_event') # todo
+        event = {
+            'summary': vk_event['name'],
+            'location': vk_event['location'],
+            'description': vk_event['description'],
+            'start': {
+                'dateTime': datetime.datetime.fromtimestamp(vk_event['start_date']).isoformat() + 'Z',
+                },
+            'end': {
+                'dateTime': datetime.datetime.fromtimestamp(vk_event['finish_date']).isoformat() + 'Z',
+                },
+            }
+        
+        # add new event
+        event_result = service.events().insert(calendarId = args.cid, body = event).execute()
+        print ('Event created: %s' % (event_result.get('htmlLink')))
