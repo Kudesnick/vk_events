@@ -101,6 +101,7 @@ if __name__ == "__main__":
             if f"vk_id: {vk_event['id']}" in event['description']:
                 s = int(datetime.datetime.fromisoformat(event['start']['dateTime']).timestamp())
                 f = int(datetime.datetime.fromisoformat(event['end']['dateTime']).timestamp())
+                # todo: timezone hardcode !!!
                 if vk_event['name'] != event['summary'] or \
                    vk_event['location'] != event['location'] or \
                    vk_event['description'] not in event['description'] or \
