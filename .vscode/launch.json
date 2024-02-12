@@ -8,7 +8,14 @@
             "program": "vk_events.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": ["--vk-token", "vk-events.key"]
+            "args": [
+                "--vk-token",
+                "vk-events.key",
+                "--google-auth",
+                "vk-events.json",
+                "--calendar-id",
+                ""
+            ]
         }
     ]
 }

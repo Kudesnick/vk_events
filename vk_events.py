@@ -14,7 +14,7 @@ def vk_get_events(vk_token: str, time: int):
     if not response: exit(-1)
     print(response.json())
     user_id = response.json()['response'][0]['id']
-    tz = int(response.json()['response'][0]['timezone']) * 60 * 60
+    timezone = int(response.json()['response'][0]['timezone'])
 
     data['user_id'] = user_id
     data['filter'] = 'events'
@@ -22,18 +22,17 @@ def vk_get_events(vk_token: str, time: int):
     data['fields'] = 'start_date,finish_date,addresses'
     response = requests.post('https://api.vk.com/method/groups.get', data = data)
     if not response: exit(-1)
-    events = [{k: v for k, v in i.items() if not 'photo' in k} for i in response.json()['response']['items'] if i['start_date'] >= time]
-    for event in events:
-        if not 'finish_date' in event:
-            d = 24 * 60 * 60
-            event['finish_date'] = (event['start_date'] + d) // d * d - 60 - tz
 
-        event['start_date']  -= tz
-        event['finish_date'] -= tz
+    events = [{k: v for k, v in i.items() if not 'photo' in k} for i in response.json()['response']['items'] if i['start_date'] >= time]
     print(events)
 
-    return events
+    return events, timezone
 
+def isofromtimestamp(timestamp: int) -> str:
+    return datetime.datetime.fromtimestamp(timestamp, tz = datetime.timezone.utc).isoformat()
+
+def timestampfromiso(iso: str) -> int:
+    return datetime.datetime.fromisoformat(iso).timestamp()
 
 if __name__ == "__main__":
     from argparse import ArgumentParser, FileType
@@ -47,7 +46,7 @@ if __name__ == "__main__":
 
     curr_time = datetime.datetime.utcnow()
 
-    vk_events = vk_get_events(args.vk.read(), curr_time.timestamp())
+    vk_events, timezone = vk_get_events(args.vk.read(), curr_time.timestamp())
     for e in vk_events:
         e['location'] = ''
         if e['addresses']['is_enabled'] and e['addresses']['main_address']:
@@ -57,6 +56,10 @@ if __name__ == "__main__":
 
         if not e['screen_name']: e['screen_name'] = f"event{e['id']}"
         e['description'] = f"<a href='https://vk.com/{e['screen_name']}' title = 'vk_id: {e['id']}'>{e['name']}</a><br/>{e['location']}"
+
+        if not 'finish_date' in e:
+            d = 24 * 60 * 60
+            e['finish_date'] = (e['start_date'] + d) // d * d - 60 - timezone * 60 * 60
 
     # google calendar ==========================================================
 
@@ -99,22 +102,19 @@ if __name__ == "__main__":
         if not 'location' in event: event['location'] = ''
         for vk_event in vk_events:
             if f"vk_id: {vk_event['id']}" in event['description']:
-                s = int(datetime.datetime.fromisoformat(event['start']['dateTime']).timestamp())
-                f = int(datetime.datetime.fromisoformat(event['end']['dateTime']).timestamp())
-                # todo: timezone hardcode !!!
                 if vk_event['name'] != event['summary'] or \
                    vk_event['location'] != event['location'] or \
                    vk_event['description'] not in event['description'] or \
-                   vk_event['start_date'] != s - 3 * 60 * 60 or \
-                   vk_event['finish_date'] != f - 3 * 60 * 60 or \
+                   vk_event['start_date'] != timestampfromiso(event['start']['dateTime']) or \
+                   vk_event['finish_date'] != timestampfromiso(event['end']['dateTime']) or \
                    False:
                     
                     event['summary'] = vk_event['name']
                     event['location'] = vk_event['location']
                     if vk_event['description'] not in event['description']:
                         event['description'] = vk_event['description']
-                    event['start']['dateTime'] = datetime.datetime.fromtimestamp(vk_event['start_date']).isoformat() + 'Z'
-                    event['end']['dateTime'] = datetime.datetime.fromtimestamp(vk_event['finish_date']).isoformat() + 'Z'
+                    event['start']['dateTime'] = isofromtimestamp(vk_event['start_date'])
+                    event['end']['dateTime'] = isofromtimestamp(vk_event['finish_date'])
                     
                     # update event
                     updated_event = service.events().update(calendarId = args.cid, eventId = event['id'], body = event).execute()
@@ -133,10 +133,12 @@ if __name__ == "__main__":
             'location': vk_event['location'],
             'description': vk_event['description'],
             'start': {
-                'dateTime': datetime.datetime.fromtimestamp(vk_event['start_date']).isoformat() + 'Z',
+                'dateTime': isofromtimestamp(vk_event['start_date']),
+                'timeZone': 'GMT',
                 },
             'end': {
-                'dateTime': datetime.datetime.fromtimestamp(vk_event['finish_date']).isoformat() + 'Z',
+                'dateTime': isofromtimestamp(vk_event['finish_date']),
+                'timeZone': 'GMT',
                 },
             }
         
