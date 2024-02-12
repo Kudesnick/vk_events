@@ -32,7 +32,10 @@ def isofromtimestamp(timestamp: int) -> str:
     return datetime.datetime.fromtimestamp(timestamp, tz = datetime.timezone.utc).isoformat()
 
 def timestampfromiso(iso: str) -> int:
-    return datetime.datetime.fromisoformat(iso).timestamp()
+    # return datetime.datetime.fromisoformat(iso) not supported for python 3.5.3
+    iso = iso[:-3] + '00'
+    d = datetime.datetime.strptime(iso, '%Y-%m-%dT%H:%M:%S%z')
+    return d.timestamp()
 
 if __name__ == "__main__":
     from argparse import ArgumentParser, FileType
@@ -63,8 +66,9 @@ if __name__ == "__main__":
 
     # google calendar ==========================================================
 
-    # pip install --upgrade google-api-python-client
-    # pip install --upgrade google-auth google-auth-oauthlib google-auth-httplib2
+    # pip install google-api-python-client==1.7.9
+    # pip install google-auth==1.23.0 google-auth-oauthlib==0.4.1 google-auth-httplib2
+    # adapted fo python v3.5.3
 
     import googleapiclient
     from google.oauth2 import service_account
