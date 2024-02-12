@@ -14,7 +14,7 @@
                 "--google-auth",
                 "vk-events.json",
                 "--calendar-id",
-                ""
+                "calendar-id.txt"
             ]
         }
     ]

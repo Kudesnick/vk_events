@@ -41,7 +41,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(prog='vk events', description='VK events to Google calenar')
     parser.add_argument('-v', '--vk-token', dest = 'vk', required=True, type = FileType(), metavar='<vk-token>', help='VK user token. see https://oauth.vk.com/authorize?client_id=2685278&scope=offline&redirect_uri=https://api.vk.com/blank.html&response_type=token')
     parser.add_argument('-g', '--google-auth', dest = 'ga', required=True, type = str, metavar='<google-auth>', help='Google API authentification file')
-    parser.add_argument('-c', '--calendar-id', dest = 'cid', required=True, type = str, metavar='<calendar-id>', help='Calendar id for insert')
+    parser.add_argument('-c', '--calendar-id', dest = 'cid', required=True, type = FileType(), metavar='<calendar-id>', help='Calendar id for insert')
     args = parser.parse_args()
 
     curr_time = datetime.datetime.utcnow()
@@ -51,11 +51,11 @@ if __name__ == "__main__":
         e['location'] = ''
         if e['addresses']['is_enabled'] and e['addresses']['main_address']:
             addr = e['addresses']['main_address']
-            e['location'] = f"{addr['title']}, {addr['address']}, {addr['city']['title']}"
-            if addr['metro_station']: e['location'] = f"{e['location']}, м. {addr['metro_station']['name']}"
+            e['location'] = ', '.join([addr['title'], addr['address'], addr['city']['title']])
+            if addr['metro_station']: e['location'] = '{}, м. {}'.format(e['location'], addr['metro_station']['name'])
 
-        if not e['screen_name']: e['screen_name'] = f"event{e['id']}"
-        e['description'] = f"<a href='https://vk.com/{e['screen_name']}' title = 'vk_id: {e['id']}'>{e['name']}</a><br/>{e['location']}"
+        if not e['screen_name']: e['screen_name'] = 'event{}'.format(e['id'])
+        e['description'] = "<a href='https://vk.com/{}' title = 'vk_id: {}'>{}</a><br/>{}".format(e['screen_name'], e['id'], e['name'], e['location'])
 
         if not 'finish_date' in e:
             d = 24 * 60 * 60
@@ -72,20 +72,22 @@ if __name__ == "__main__":
 
     g_auth = args.ga
 
+    g_calendar_id = args.cid.read()
+
     credentials = service_account.Credentials.from_service_account_file(g_auth, scopes = [g_scope])
     service = googleapiclient.discovery.build('calendar', 'v3', credentials = credentials)
 
     # get calendar info
     calendar_list = service.calendarList().list().execute()
-    calendar_list = [i for i in calendar_list['items'] if i['id'] == args.cid]
+    calendar_list = [i for i in calendar_list['items'] if i['id'] == g_calendar_id]
     if len(calendar_list) < 1:
         # insert calendar (first time function)
-        calendar_list_entry = {'id': args.cid}
+        calendar_list_entry = {'id': g_calendar_id}
         created_calendar_list_entry = service.calendarList().insert(body=calendar_list_entry).execute()
         print(created_calendar_list_entry['summary'])
     
         calendar_list = service.calendarList().list().execute()
-        calendar_list = [i for i in calendar_list['items'] if i['id'] == args.cid]
+        calendar_list = [i for i in calendar_list['items'] if i['id'] == g_calendar_id]
     
     if len(calendar_list) < 1:
         exit(-1)
@@ -93,7 +95,7 @@ if __name__ == "__main__":
     print(calendar_list[0])
 
     # get events list
-    events_result = service.events().list(calendarId = args.cid, timeMin = curr_time.isoformat() + 'Z', singleEvents = True).execute()
+    events_result = service.events().list(calendarId = g_calendar_id, timeMin = curr_time.isoformat() + 'Z', singleEvents = True).execute()
     events = events_result.get('items', [])
     print(events)
 
@@ -101,7 +103,7 @@ if __name__ == "__main__":
     for event in [i for i in events if 'vk_id: ' in i['description']]: # is robots event
         if not 'location' in event: event['location'] = ''
         for vk_event in vk_events:
-            if f"vk_id: {vk_event['id']}" in event['description']:
+            if 'vk_id: {}'.format(vk_event['id']) in event['description']:
                 if vk_event['name'] != event['summary'] or \
                    vk_event['location'] != event['location'] or \
                    vk_event['description'] not in event['description'] or \
@@ -117,15 +119,15 @@ if __name__ == "__main__":
                     event['end']['dateTime'] = isofromtimestamp(vk_event['finish_date'])
                     
                     # update event
-                    updated_event = service.events().update(calendarId = args.cid, eventId = event['id'], body = event).execute()
+                    updated_event = service.events().update(calendarId = g_calendar_id, eventId = event['id'], body = event).execute()
                     print (updated_event['updated'])  # Print the updated date.
 
                 vk_event['id'] = 0
                 break
         else:
             # delete event
-            service.events().delete(calendarId = args.cid, eventId = event['id']).execute()
-            print(f"event '{event['id']}' is deleted")
+            service.events().delete(calendarId = g_calendar_id, eventId = event['id']).execute()
+            print('event "{}" is deleted'.format(event['id']))
 
     for vk_event in [i for i in vk_events if i['id'] != 0]:
         event = {
@@ -143,5 +145,5 @@ if __name__ == "__main__":
             }
         
         # add new event
-        event_result = service.events().insert(calendarId = args.cid, body = event).execute()
+        event_result = service.events().insert(calendarId = g_calendar_id, body = event).execute()
         print ('Event created: %s' % (event_result.get('htmlLink')))
