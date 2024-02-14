@@ -2,6 +2,23 @@
 
 app_id = 2685278 # KateMobile
 g_scope = 'https://www.googleapis.com/auth/calendar'
+g_color_id = { # see https://lukeboyle.com/blog/posts/google-calendar-api-color-id
+    'Default'  :  0, # color of calendar
+    'Lavender' :  1, #7986cb
+    'Sage'     :  2, #33b679
+    'Grape'    :  3, #8e24aa
+    'Flamingo' :  4, #e67c73
+    'Banana'   :  5, #f6c026
+    'Tangerine':  6, #f5511d
+    'Peacock'  :  7, #039be5
+    'Graphite' :  8, #616161
+    'Blueberry':  9, #3f51b5
+    'Basil'    : 10, #0b8043
+    'Tomato'   : 11, #d60000
+}
+
+definitely_id = 1
+possibly_id = 2
 
 # vkontakte ====================================================================
 def vk_get_events(vk_token: str, time: int):
@@ -19,7 +36,7 @@ def vk_get_events(vk_token: str, time: int):
     data['user_id'] = user_id
     data['filter'] = 'events'
     data['extended'] = 1
-    data['fields'] = 'start_date,finish_date,addresses'
+    data['fields'] = 'start_date,finish_date,addresses,member_status'
     response = requests.post('https://api.vk.com/method/groups.get', data = data)
     if not response: exit(-1)
 
@@ -42,10 +59,14 @@ if __name__ == "__main__":
     import datetime
 
     parser = ArgumentParser(prog='vk events', description='VK events to Google calenar')
-    parser.add_argument('-v', '--vk-token', dest = 'vk', required=True, type = FileType(), metavar='<vk-token>', help='VK user token. see https://oauth.vk.com/authorize?client_id=2685278&scope=offline&redirect_uri=https://api.vk.com/blank.html&response_type=token')
-    parser.add_argument('-g', '--google-auth', dest = 'ga', required=True, type = str, metavar='<google-auth>', help='Google API authentification file')
-    parser.add_argument('-c', '--calendar-id', dest = 'cid', required=True, type = FileType(), metavar='<calendar-id>', help='Calendar id for insert')
+    parser.add_argument('-v', '--vk-token'   , dest = 'vk', required=True, type = FileType(), metavar='<file name>', help='VK user token. see https://oauth.vk.com/authorize?client_id=2685278&scope=offline&redirect_uri=https://api.vk.com/blank.html&response_type=token')
+    parser.add_argument('-g', '--google-auth', dest = 'ga', required=True, type = str, metavar='<file name>', help='Google API authentification file')
+    parser.add_argument('-c', '--calendar-id', dest = 'cid', required=True, type = FileType(), metavar='<file name>', help='Calendar id for insert')
+    parser.add_argument('-f', '--force'      , dest = 'force_upd', action='store_true', help='Force update all items')
+    parser.add_argument('--colors', dest = 'colors', nargs='+', default=['Default', 'Tangerine'], metavar='<definitely color> [possibly color]', help='definitely and possibly events colors. Variants: {}'.format(', '.join(['"{}"'.format(i) for i in g_color_id.keys()])))
+
     args = parser.parse_args()
+    if len(args.colors) < 2: args.colors.append(args.colors[0])
 
     curr_time = datetime.datetime.utcnow()
 
@@ -64,10 +85,11 @@ if __name__ == "__main__":
             d = 24 * 60 * 60
             e['finish_date'] = (e['start_date'] + d) // d * d - 60 - timezone * 60 * 60
 
+        e['colorId'] = g_color_id.get(args.colors[0], 0) if e['member_status'] == definitely_id else g_color_id.get(args.colors[1], 0)
+
     # google calendar ==========================================================
 
-    # pip install google-api-python-client==1.7.9
-    # pip install google-auth==1.23.0 google-auth-oauthlib==0.4.1 google-auth-httplib2
+    # pip install google-api-python-client==1.7.9 google-auth==1.23.0 google-auth-oauthlib==0.4.1 google-auth-httplib2
     # adapted fo python v3.5.3
 
     import googleapiclient
@@ -108,11 +130,13 @@ if __name__ == "__main__":
         if not 'location' in event: event['location'] = ''
         for vk_event in vk_events:
             if 'vk_id: {}'.format(vk_event['id']) in event['description']:
-                if vk_event['name'] != event['summary'] or \
-                   vk_event['location'] != event['location'] or \
+                if args.force_upd == True or\
+                   vk_event['name'] != event['summary'] or \
+                   vk_event['location'] not in event['location'] or \
                    vk_event['description'] not in event['description'] or \
                    vk_event['start_date'] != timestampfromiso(event['start']['dateTime']) or \
                    vk_event['finish_date'] != timestampfromiso(event['end']['dateTime']) or \
+                   vk_event['colorId'] != event['colorId'] or \
                    False:
                     
                     event['summary'] = vk_event['name']
@@ -121,6 +145,7 @@ if __name__ == "__main__":
                         event['description'] = vk_event['description']
                     event['start']['dateTime'] = isofromtimestamp(vk_event['start_date'])
                     event['end']['dateTime'] = isofromtimestamp(vk_event['finish_date'])
+                    event['colorId'] = vk_event['colorId']
                     
                     # update event
                     updated_event = service.events().update(calendarId = g_calendar_id, eventId = event['id'], body = event).execute()
@@ -138,6 +163,7 @@ if __name__ == "__main__":
             'summary': vk_event['name'],
             'location': vk_event['location'],
             'description': vk_event['description'],
+            'colorId': vk_event['colorId'],
             'start': {
                 'dateTime': isofromtimestamp(vk_event['start_date']),
                 'timeZone': 'GMT',

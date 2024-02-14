@@ -9,12 +9,11 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--vk-token",
-                "vk-events.key",
-                "--google-auth",
-                "vk-events.json",
-                "--calendar-id",
-                "calendar-id.txt"
+                "--vk-token", "vk-events.key",
+                "--google-auth", "vk-events.json",
+                "--calendar-id", "calendar-id.txt",
+                "--colors", "Default", "Tangerine",
+                "--force"
             ]
         }
     ]
