@@ -136,11 +136,13 @@ if __name__ == "__main__":
                    vk_event['description'] not in event['description'] or \
                    vk_event['start_date'] != timestampfromiso(event['start']['dateTime']) or \
                    vk_event['finish_date'] != timestampfromiso(event['end']['dateTime']) or \
-                   vk_event['colorId'] != event['colorId'] or \
+                   ('colorId' not in event and vk_event['colorId'] != g_color_id['Default']) or \
+                   ('colorId' in event and vk_event['colorId'] != int(event['colorId'])) or \
                    False:
                     
                     event['summary'] = vk_event['name']
-                    event['location'] = vk_event['location']
+                    if vk_event['location'] not in event['location']:
+                        event['location'] = vk_event['location']
                     if vk_event['description'] not in event['description']:
                         event['description'] = vk_event['description']
                     event['start']['dateTime'] = isofromtimestamp(vk_event['start_date'])
