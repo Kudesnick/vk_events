@@ -30,7 +30,7 @@ class vk:
             'user_id': self.__user_id,
             'filter': 'events',
             'extended': 1,
-            'fields': 'start_date,finish_date,addresses,member_status'
+            'fields': 'start_date,finish_date,addresses,member_status,description'
         }
 
         response = requests.post('https://api.vk.com/method/groups.get', data = data)
@@ -54,7 +54,7 @@ class vk:
                 if addr['metro_station']: e['location'] = '{}, м. {}'.format(e['location'], addr['metro_station']['name'])
 
             if not e['screen_name']: e['screen_name'] = 'event{}'.format(e['id'])
-            e['description'] = "<a href='https://vk.com/{}' title = 'vk_id: {}'>{}</a><br/>{}".format(e['screen_name'], e['id'], e['name'], e['location'])
+            e['description'] = "<h1><a href='https://vk.com/{}' title = 'vk_id: {}'>{}</a></h1><p>{}</p><p>{}</p>".format(e['screen_name'], e['id'], e['name'], e['location'], str(e['description']).replace('\n', '<br/>'))
 
             if not 'finish_date' in e:
                 d = 24 * 60 * 60
