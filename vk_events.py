@@ -5,6 +5,8 @@ import datetime
 # vkontakte ====================================================================
 
 import requests
+import urllib.parse
+import re
 
 app_id = 2685278 # KateMobile
 
@@ -48,13 +50,24 @@ class vk:
 
         for e in self.events:
             e['location'] = ''
+            find_location = ''
             if e['addresses']['is_enabled'] and e['addresses']['main_address']:
                 addr = e['addresses']['main_address']
                 e['location'] = ', '.join([addr['title'], addr['address'], addr['city']['title']])
-                if addr['metro_station']: e['location'] = '{}, м. {}'.format(e['location'], addr['metro_station']['name'])
+                find_location = e['location']
+                if addr['metro_station']:
+                    e['location'] = '{}, м. {}'.format(e['location'], addr['metro_station']['name'])
 
             if not e['screen_name']: e['screen_name'] = 'event{}'.format(e['id'])
-            e['description'] = "<h1><a href='https://vk.com/{}' title = 'vk_id: {}'>{}</a></h1><p>{}</p><p>{}</p>".format(e['screen_name'], e['id'], e['name'], e['location'], str(e['description']).replace('\n', '<br/>'))
+            header = "<h3><a href='https://vk.com/{}' title = 'vk_id: {}'>{}</a></h3>".format(e['screen_name'], e['id'], e['name'])
+            # add link to 2gis location find
+            place = ''
+            if find_location != '':
+                place = "<p><a href='https://2gis.ru/spb/search/{}'>{}</a></p>".format(urllib.parse.quote(find_location), e['location'])
+            # replace vk syntax to html
+            e['description'] = re.sub(r"\[(.*)\|(.*)\]", r"<a href='https://vk.com/\1'>\2</a>", e['description'])
+            # compile description
+            e['description'] = "{}{}<p>{}</p>".format(header, place, str(e['description']).replace('\n', '<br/>'))
 
             if not 'finish_date' in e:
                 d = 24 * 60 * 60
@@ -169,7 +182,7 @@ class google_calendar:
             print ('Event insert: {}'.format(event_result.get('htmlLink')))
 
     def __event_del(self, event_id: int):
-        event_result = self.__service.events().delete(calendarId = calendar.__calendar_id, eventId = event_id).execute()
+        self.__service.events().delete(calendarId = calendar.__calendar_id, eventId = event_id).execute()
         print ('Event delete: {}'.format(event_id))
 
     def events_upd(self, vk_events: list, force: bool = False):
