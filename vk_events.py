@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import datetime
+
 # vkontakte ====================================================================
 
 import requests
@@ -198,7 +200,6 @@ class google_calendar:
 # main function ================================================================
 if __name__ == "__main__":
     from argparse import ArgumentParser, FileType
-    import datetime
 
     print('command line parsing ==============================================')
 
