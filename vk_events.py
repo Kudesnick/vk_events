@@ -51,11 +51,11 @@ class vk:
         for e in self.events:
             e['location'] = ''
             find_location = ''
-            if e['addresses']['is_enabled'] and e['addresses']['main_address']:
+            if e['addresses']['is_enabled'] and 'main_address' in e['addresses']:
                 addr = e['addresses']['main_address']
                 e['location'] = ', '.join([addr['title'], addr['address'], addr['city']['title']])
                 find_location = e['location']
-                if addr['metro_station']:
+                if 'metro_station' in addr:
                     e['location'] = '{}, м. {}'.format(e['location'], addr['metro_station']['name'])
 
             if not e['screen_name']: e['screen_name'] = 'event{}'.format(e['id'])
@@ -187,7 +187,7 @@ class google_calendar:
         self.__service.events().delete(calendarId = calendar.__calendar_id, eventId = event_id).execute()
         print ('Event delete: {}'.format(event_id))
 
-    def events_upd(self, vk_events: list, force: bool = False):
+    def events_upd(self, vk_events: list, force: bool = False, nodel: bool = False):
         # edit events list
         for e in [i for i in self.events if 'vk_id: ' in i['description']]: # is robots event
             if not 'location' in e: e['location'] = ''
@@ -207,7 +207,8 @@ class google_calendar:
                     ve['id'] = 0
                     break
             else:
-                self.__event_del(e['id'])
+                if not nodel:
+                    self.__event_del(e['id'])
 
         for ve in [i for i in vk_events if i['id'] != 0]:
             self.__event_upd(ve)
@@ -225,6 +226,7 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--time'       , dest = 'time', type = str, metavar='<timestamp | ISO 8601>', help='Minimum event start time for synchronization. ISO format must be YYYY-MM-DDThh:mm:ss+hh:mm')
     parser.add_argument('-c', '--colors'     , dest = 'colors', nargs='+', default=['Default', 'Tangerine'], metavar='<definitely color> [possibly color]', help='definitely and possibly events colors. Variants: {}'.format(', '.join(['"{}"'.format(i) for i in google_calendar.colorId.keys()])))
     parser.add_argument('-f', '--force'      , dest = 'force_upd', action='store_true', help='Force update all items')
+    parser.add_argument('-u', '--update-only', dest = 'upd_only', action='store_true', help='Not deleted invalid events')
 
     args = parser.parse_args()
     if len(args.colors) < 2: args.colors.append(args.colors[0])
@@ -250,6 +252,6 @@ if __name__ == "__main__":
 
     print('sync events =======================================================')
 
-    calendar.events_upd(vk_events.events, args.force_upd)
+    calendar.events_upd(vk_events.events, args.force_upd, args.upd_only)
 
     print('success ===========================================================')
