@@ -98,6 +98,7 @@ def timestampfromiso(iso: str) -> int:
 import googleapiclient
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from copy import deepcopy
 
 class google_calendar:
     scope = 'https://www.googleapis.com/auth/calendar'
@@ -143,12 +144,12 @@ class google_calendar:
 
     def get_events(self, time: int = 0):
         events_result = self.__service.events().list(calendarId = self.__calendar_id, timeMin = isofromtimestamp(time), singleEvents = True).execute()
-        self.events = events_result.get('items', [])
+        self.events = [i for i in events_result.get('items', []) if timestampfromiso(i['start']['dateTime']) >= time]
 
         print('calendar events list: {}'.format(self.events))
 
         return len(self.events)
-    
+
     __base_event = {
         'summary': '',
         'location': '',
@@ -165,6 +166,7 @@ class google_calendar:
     }
 
     def __event_upd(self, vk_event, g_event = __base_event):
+        g_event = deepcopy(g_event)
         g_event['summary'] = vk_event['name']
         if vk_event['location'] not in g_event['location']:
             g_event['location'] = vk_event['location']
@@ -219,26 +221,32 @@ if __name__ == "__main__":
     parser = ArgumentParser(prog='vk events', description='VK events to Google calenar')
     parser.add_argument('-v', '--vk-token'   , dest = 'vk', required=True, type = FileType(), metavar='<file name>', help='VK user token. see https://oauth.vk.com/authorize?client_id=2685278&scope=offline&redirect_uri=https://api.vk.com/blank.html&response_type=token')
     parser.add_argument('-g', '--google-auth', dest = 'ga', required=True, type = str, metavar='<file name>', help='Google API authentification file')
-    parser.add_argument('-c', '--calendar-id', dest = 'cid', required=True, type = FileType(), metavar='<file name>', help='Calendar id for insert')
+    parser.add_argument('-i', '--calendar-id', dest = 'cid', required=True, type = FileType(), metavar='<file name>', help='Calendar id for insert')
+    parser.add_argument('-t', '--time'       , dest = 'time', type = str, metavar='<timestamp | ISO 8601>', help='Minimum event start time for synchronization. ISO format must be YYYY-MM-DDThh:mm:ss+hh:mm')
+    parser.add_argument('-c', '--colors'     , dest = 'colors', nargs='+', default=['Default', 'Tangerine'], metavar='<definitely color> [possibly color]', help='definitely and possibly events colors. Variants: {}'.format(', '.join(['"{}"'.format(i) for i in google_calendar.colorId.keys()])))
     parser.add_argument('-f', '--force'      , dest = 'force_upd', action='store_true', help='Force update all items')
-    parser.add_argument('--colors', dest = 'colors', nargs='+', default=['Default', 'Tangerine'], metavar='<definitely color> [possibly color]', help='definitely and possibly events colors. Variants: {}'.format(', '.join(['"{}"'.format(i) for i in google_calendar.colorId.keys()])))
 
     args = parser.parse_args()
     if len(args.colors) < 2: args.colors.append(args.colors[0])
 
-    curr_time = datetime.datetime.utcnow().timestamp()
+    try:        min_time = int(args.time)
+    except:
+        try:    min_time = timestampfromiso(args.time)
+        except: min_time = datetime.datetime.utcnow().timestamp()
+
+    print('Minimal time: {}'.format(isofromtimestamp(min_time)))
 
     print('vk events download ================================================')
 
     vk_events = vk(args.vk.read())
-    vk_events.events_verbose(google_calendar.colorId, curr_time)
+    vk_events.events_verbose(google_calendar.colorId, min_time)
 
     # google calendar ==========================================================
 
     print('google calendar events download ===================================')
 
     calendar = google_calendar(args.ga, args.cid.read())
-    calendar.get_events(curr_time)
+    calendar.get_events(min_time)
 
     print('sync events =======================================================')
 
