@@ -14,6 +14,8 @@ class vk:
     __api_v = '5.199'
     definitely_id = 1
     possibly_id = 2
+    invite_id = 5
+
 
     def __init__(self, vk_token: str):
         self.__token = vk_token
@@ -21,11 +23,10 @@ class vk:
 
         response = requests.post('https://api.vk.com/method/users.get', data = data)
         if not response: exit(-1)
-        print('url "{}" response text: {}'.format(response.url, response.text))
         self.__user_id = response.json()['response'][0]['id']
         self.timezone = int(response.json()['response'][0]['timezone'])
 
-    def get_events(self, time: int = 0):
+    def __get_events(self, cmd: str = 'get', time: int = 0):
         data = {
             'access_token': self.__token,
             'v': self.__api_v,
@@ -35,11 +36,17 @@ class vk:
             'fields': 'start_date,finish_date,addresses,member_status,description'
         }
 
-        response = requests.post('https://api.vk.com/method/groups.get', data = data)
+        response = requests.post('https://api.vk.com/method/groups.{}'.format(cmd), data = data)
         if not response: exit(-1)
-        print('url "{}" response text: {}'.format(response.url, response.text))
 
-        self.events = [{k: v for k, v in i.items() if not 'photo' in k} for i in response.json()['response']['items'] if i['start_date'] >= time]
+        return [{k: v for k, v in i.items() if not 'photo' in k} for i in response.json()['response']['items'] if i['start_date'] >= time]
+
+
+
+    def get_events(self, time: int = 0):
+        self.events = []
+        self.events.extend(self.__get_events('get', time))
+        self.events.extend(self.__get_events('getInvites', time))
 
         print('{} events after filtered'.format(len(self.events)))
         return len(self.events)
@@ -73,9 +80,8 @@ class vk:
                 d = 24 * 60 * 60
                 e['finish_date'] = (e['start_date'] + d) // d * d - 60 - self.timezone * 60 * 60
 
-            e['colorId'] = color_scheme.get(args.colors[0], 0) if e['member_status'] == self.definitely_id else color_scheme.get(args.colors[1], 0)
+            e['colorId'] = color_scheme.get(e['member_status'], 0)
 
-        print('verbose vk events: {}'.format(self.events))
         return len(self.events)
 
 
@@ -145,8 +151,6 @@ class google_calendar:
     def get_events(self, time: int = 0):
         events_result = self.__service.events().list(calendarId = self.__calendar_id, timeMin = isofromtimestamp(time), singleEvents = True).execute()
         self.events = [i for i in events_result.get('items', []) if timestampfromiso(i['start']['dateTime']) >= time]
-
-        print('calendar events list: {}'.format(self.events))
 
         return len(self.events)
 
@@ -224,12 +228,13 @@ if __name__ == "__main__":
     parser.add_argument('-g', '--google-auth', dest = 'ga', required=True, type = str, metavar='<file name>', help='Google API authentification file')
     parser.add_argument('-i', '--calendar-id', dest = 'cid', required=True, type = FileType(), metavar='<file name>', help='Calendar id for insert')
     parser.add_argument('-t', '--time'       , dest = 'time', type = str, metavar='<timestamp | ISO 8601>', help='Minimum event start time for synchronization. ISO format must be YYYY-MM-DDThh:mm:ss+hh:mm')
-    parser.add_argument('-c', '--colors'     , dest = 'colors', nargs='+', default=['Default', 'Tangerine'], metavar='<definitely color> [possibly color]', help='definitely and possibly events colors. Variants: {}'.format(', '.join(['"{}"'.format(i) for i in google_calendar.colorId.keys()])))
+    parser.add_argument('-c', '--colors'     , dest = 'colors', nargs='+', default=['Default', 'Tangerine', 'Banana'], metavar='<definitely color> [possibly color]', help='definitely and possibly events colors. Variants: {}'.format(', '.join(['"{}"'.format(i) for i in google_calendar.colorId.keys()])))
     parser.add_argument('-f', '--force'      , dest = 'force_upd', action='store_true', help='Force update all items')
     parser.add_argument('-u', '--update-only', dest = 'upd_only', action='store_true', help='Not deleted invalid events')
 
     args = parser.parse_args()
     if len(args.colors) < 2: args.colors.append(args.colors[0])
+    if len(args.colors) < 3: args.colors.append(args.colors[1])
 
     try:        min_time = int(args.time)
     except:
@@ -241,7 +246,12 @@ if __name__ == "__main__":
     print('vk events download ================================================')
 
     vk_events = vk(args.vk.read())
-    vk_events.events_verbose(google_calendar.colorId, min_time)
+    color_sheme = {
+        vk.definitely_id: google_calendar.colorId.get(args.colors[0], 0),
+        vk.possibly_id  : google_calendar.colorId.get(args.colors[1], 0),
+        vk.invite_id    : google_calendar.colorId.get(args.colors[2], 0),
+    }
+    vk_events.events_verbose(color_sheme, min_time)
 
     # google calendar ==========================================================
 
