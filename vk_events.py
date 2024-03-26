@@ -39,7 +39,7 @@ class vk:
         response = requests.post('https://api.vk.com/method/groups.{}'.format(cmd), data = data)
         if not response: exit(-1)
 
-        return [{k: v for k, v in i.items() if not 'photo' in k} for i in response.json()['response']['items'] if i['start_date'] >= time]
+        return [{k: v for k, v in i.items() if not 'photo' in k} for i in response.json()['response']['items'] if 'start_date' in i and i['start_date'] >= time]
 
 
 
